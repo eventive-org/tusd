@@ -62,12 +62,12 @@ type AzBlob interface {
 }
 
 type BlockBlob struct {
-	blob    *azblob.BlockBlobURL
-	indexes []int
+	Blob    *azblob.BlockBlobURL
+	Indexes []int
 }
 
 type InfoBlob struct {
-	blob *azblob.BlockBlobURL
+	Blob *azblob.BlockBlobURL
 }
 
 func (a AzError) Error() string {
@@ -103,12 +103,12 @@ func (service *azService) NewBlob(ctx context.Context, name string) (AzBlob, err
 	bb := service.ContainerURL.NewBlockBlobURL(name)
 	if strings.HasSuffix(name, InfoBlobSuffix) {
 		fileBlob = &InfoBlob{
-			blob: &bb,
+			Blob: &bb,
 		}
 	} else {
 		fileBlob = &BlockBlob{
-			blob:    &bb,
-			indexes: []int{},
+			Blob:    &bb,
+			Indexes: []int{},
 		}
 	}
 	return fileBlob, nil
@@ -116,7 +116,7 @@ func (service *azService) NewBlob(ctx context.Context, name string) (AzBlob, err
 
 func (blockBlob *BlockBlob) Create(ctx context.Context) error {
 	// We need to create an empty BlockBlob before we can start staging blocks to it
-	_, err := azblob.UploadBufferToBlockBlob(ctx, []byte{}, *blockBlob.blob, azblob.UploadToBlockBlobOptions{})
+	_, err := azblob.UploadBufferToBlockBlob(ctx, []byte{}, *blockBlob.Blob, azblob.UploadToBlockBlobOptions{})
 	if err != nil {
 		return err
 	}
@@ -125,21 +125,21 @@ func (blockBlob *BlockBlob) Create(ctx context.Context) error {
 }
 
 func (blockBlob *BlockBlob) Delete(ctx context.Context) error {
-	_, err := blockBlob.blob.Delete(ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
+	_, err := blockBlob.Blob.Delete(ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
 	return err
 }
 
 func (blockBlob *BlockBlob) Upload(ctx context.Context, body io.ReadSeeker) error {
 	// Keep track of the indexes
 	var index int
-	if len(blockBlob.indexes) == 0 {
+	if len(blockBlob.Indexes) == 0 {
 		index = 0
 	} else {
-		index = blockBlob.indexes[len(blockBlob.indexes)-1] + 1
+		index = blockBlob.Indexes[len(blockBlob.Indexes)-1] + 1
 	}
-	blockBlob.indexes = append(blockBlob.indexes, index)
+	blockBlob.Indexes = append(blockBlob.Indexes, index)
 
-	_, err := blockBlob.blob.StageBlock(ctx, blockIDIntToBase64(index), body,
+	_, err := blockBlob.Blob.StageBlock(ctx, blockIDIntToBase64(index), body,
 		azblob.LeaseAccessConditions{},
 		nil,
 		azblob.ClientProvidedKeyOptions{})
@@ -150,10 +150,10 @@ func (blockBlob *BlockBlob) Upload(ctx context.Context, body io.ReadSeeker) erro
 }
 
 func (blockBlob *BlockBlob) Download(ctx context.Context) ([]byte, error) {
-	downloadResponse, err := blockBlob.blob.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
+	downloadResponse, err := blockBlob.Blob.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 
 	if downloadResponse != nil && downloadResponse.StatusCode() == 404 {
-		url := blockBlob.blob.URL()
+		url := blockBlob.Blob.URL()
 		return nil, &AzError{
 			error:      fmt.Errorf("File %s does not exist", url.String()),
 			StatusCode: downloadResponse.StatusCode(),
@@ -182,7 +182,7 @@ func (blockBlob *BlockBlob) GetOffset(ctx context.Context) (int64, error) {
 	var offset int64
 	offset = 0
 
-	getBlock, err := blockBlob.blob.GetBlockList(ctx, azblob.BlockListAll, azblob.LeaseAccessConditions{})
+	getBlock, err := blockBlob.Blob.GetBlockList(ctx, azblob.BlockListAll, azblob.LeaseAccessConditions{})
 	if err != nil {
 		return 0, err
 	}
@@ -200,19 +200,19 @@ func (blockBlob *BlockBlob) GetOffset(ctx context.Context) (int64, error) {
 	}
 
 	sort.Ints(indexes)
-	blockBlob.indexes = indexes
+	blockBlob.Indexes = indexes
 
 	return offset, nil
 }
 
 func (blockBlob *BlockBlob) Commit(ctx context.Context) error {
 	// After all the blocks are uploaded, commit them to the blob.
-	base64BlockIDs := make([]string, len(blockBlob.indexes))
-	for index, id := range blockBlob.indexes {
+	base64BlockIDs := make([]string, len(blockBlob.Indexes))
+	for index, id := range blockBlob.Indexes {
 		base64BlockIDs[index] = blockIDIntToBase64(id)
 	}
 
-	_, err := blockBlob.blob.CommitBlockList(ctx, base64BlockIDs, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
+	_, err := blockBlob.Blob.CommitBlockList(ctx, base64BlockIDs, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
 	return err
 }
 
@@ -221,20 +221,20 @@ func (infoBlob *InfoBlob) Create(ctx context.Context) error {
 }
 
 func (infoBlob *InfoBlob) Delete(ctx context.Context) error {
-	_, err := infoBlob.blob.Delete(ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
+	_, err := infoBlob.Blob.Delete(ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
 	return err
 }
 
 func (infoBlob *InfoBlob) Upload(ctx context.Context, body io.ReadSeeker) error {
-	_, err := infoBlob.blob.Upload(ctx, body, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
+	_, err := infoBlob.Blob.Upload(ctx, body, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{}, azblob.DefaultAccessTier, nil, azblob.ClientProvidedKeyOptions{})
 	return err
 }
 
 func (infoBlob *InfoBlob) Download(ctx context.Context) ([]byte, error) {
-	downloadResponse, err := infoBlob.blob.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
+	downloadResponse, err := infoBlob.Blob.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false, azblob.ClientProvidedKeyOptions{})
 
 	if downloadResponse != nil && downloadResponse.StatusCode() == 404 {
-		url := infoBlob.blob.URL()
+		url := infoBlob.Blob.URL()
 		return nil, &AzError{
 			error:      fmt.Errorf("File %s does not exist", url.String()),
 			StatusCode: downloadResponse.StatusCode(),
